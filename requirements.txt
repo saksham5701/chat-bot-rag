@@ -19,6 +19,6 @@ typing-inspection==0.4.2
 typing_extensions==4.15.0
 sentence-transformers==5.5.1
 faiss-cpu==1.14.2
-numpy==2.4.6
+numpy<2.0
 pytest==9.0.3
 groq==0.37.1

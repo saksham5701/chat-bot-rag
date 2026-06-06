@@ -2,7 +2,7 @@
 
 This project is a small retrieval-augmented generation (RAG) prototype for answering questions from PDF documents. It reads PDFs from `data/`, extracts page text, splits that text into metadata-rich chunks, embeds the chunks with a local Sentence Transformers model, stores them in a FAISS vector index, retrieves relevant chunks for a user query, and sends the retrieved context to a Groq-hosted chat model.
 
-The repository is currently library/script oriented. There is no CLI, web server, or notebook-driven app entrypoint yet; the main behavior is exposed through Python modules under `app/` and validated with tests under `tests/`.
+The repository is currently a CLI-based Python project. The main behavior is exposed through Python modules under `app/`, with `app.main` providing a command-line entrypoint for asking questions against PDFs in `data/`.
 
 ## Project Structure
 
@@ -26,7 +26,7 @@ The repository is currently library/script oriented. There is no CLI, web server
 +-- notebooks/              # Present but currently empty
 +-- tests/                  # Unit tests for the RAG building blocks
 +-- requirements.txt        # Python dependency list
-+-- .gitignore              # Currently only ignores .env
++-- .gitignore              # Ignores local envs, secrets, caches, and generated indexes
 ```
 
 ## High-Level Architecture
@@ -167,13 +167,13 @@ The project uses:
 
 - `pypdf` to extract text from PDFs.
 - `sentence-transformers` to generate local embeddings.
-- `numpy` for vector handling.
+- `numpy<2.0` for vector handling. This constraint avoids compatibility/metadata issues seen with the newer NumPy 2.x line in this environment.
 - `faiss-cpu` for vector similarity search.
 - `groq` for hosted chat completions.
 - `python-dotenv` in the standalone first LLM smoke-test script.
 - `pytest` for tests.
 
-The installed embedding model may download model weights the first time it runs.
+The installed embedding model may download model weights the first time it runs. Use a fresh `.venv` environment; the older `venv` folder was removed from Git tracking because virtual environments should stay local.
 
 ## Environment Variables
 
@@ -237,10 +237,19 @@ The `sample_vector` call is used to discover the embedding dimension required by
 
 ## Setup
 
+Use `.venv` for the local environment. This folder is ignored by Git, so dependency installs will not be pushed to GitHub.
+
 ```powershell
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r requirements.txt
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip
+pip install --no-cache-dir -r requirements.txt
+```
+
+If dependency resolution behaves strangely, this known-good install command also works:
+
+```powershell
+pip install --no-cache-dir "numpy<2.0" sentence-transformers faiss-cpu pypdf groq python-dotenv pytest
 ```
 
 Create a `.env` file or set environment variables in your shell:
@@ -252,6 +261,19 @@ EMBEDDING_MODEL=BAAI/bge-small-en-v1.5
 ```
 
 ## Useful Commands
+
+Activate the local environment:
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+```
+
+Verify the embedding stack:
+
+```powershell
+python -c "import importlib.metadata as m; print(m.version('numpy'))"
+python -c "from sentence_transformers import SentenceTransformer; print('sentence-transformers OK')"
+```
 
 Run all tests:
 
@@ -292,13 +314,16 @@ The test suite covers the main contracts:
 
 - The core RAG pipeline is modular and testable: ingestion, chunking, embeddings, vector storage, retrieval, prompt construction, and LLM generation are separated into focused modules.
 - `app.main` provides a CLI entrypoint that performs the full ingest-to-answer workflow from one command.
+- The app was verified manually with a fresh `.venv` and the command `python -m app.main "What is this PDF about?"`.
+- The previous checked-in `venv` caused dependency metadata errors, including `SentenceTransformer` import failures and NumPy version detection errors. Virtual environments are now ignored and should not be committed.
+- `numpy<2.0` is used because the tested environment worked reliably with that constraint.
 - The vector store requires callers to know the embedding dimension before construction. The example above probes it from the embedder.
 - `load_documents` silently skips PDFs that raise exceptions. That keeps ingestion resilient, but production code should log skipped files.
-- `.gitignore` only contains `.env`; generated folders such as `venv/`, `.pytest_cache/`, and `__pycache__/` should normally be ignored.
+- `.gitignore` excludes `.env`, `venv/`, `.venv/`, caches, and generated FAISS/vector-store artifacts.
 
 ## Suggested Next Improvements
 
 1. Add logging for skipped PDFs during ingestion.
 2. Persist a built vector store under a dedicated ignored directory such as `storage/`.
-3. Expand `.gitignore` to exclude virtual environments, caches, and generated vector indexes.
-4. Add a streaming or interactive chat mode for repeated questions.
+3. Add a streaming or interactive chat mode for repeated questions.
+4. Consider replacing the broad dependency list with a smaller, tested production requirements file.
