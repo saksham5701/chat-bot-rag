@@ -16,6 +16,7 @@ The repository is currently library/script oriented. There is no CLI, web server
 |   +-- ingest.py           # PDF loading, page extraction, whitespace normalization
 |   +-- llm.py              # Groq chat-completion wrapper
 |   +-- load_pdf.py         # Standalone PDF inspection script
+|   +-- main.py             # CLI entrypoint for asking questions against PDFs
 |   +-- rag.py              # RAG prompt/context orchestration
 |   +-- retriever.py        # Embedding + vector-store retrieval coordinator
 |   +-- test_setup.py       # Python environment smoke-test script
@@ -172,7 +173,7 @@ The project uses:
 - `python-dotenv` in the standalone first LLM smoke-test script.
 - `pytest` for tests.
 
-Current note: `pypdf` and `groq` are imported by the code but are not listed in `requirements.txt`. They should be added for a fresh install to work reliably.
+The installed embedding model may download model weights the first time it runs.
 
 ## Environment Variables
 
@@ -181,14 +182,28 @@ The app reads these values:
 | Variable | Used by | Purpose | Default |
 | --- | --- | --- | --- |
 | `GROQ_API_KEY` | `app.llm.LLMClient`, `app.first_llm_call` | Required API key for Groq calls. | None |
-| `GROQ_MODEL` | `app.llm.LLMClient` | Chat model used by the reusable LLM client. | `gpt-3.5-turbo` |
+| `GROQ_MODEL` | `app.llm.LLMClient` | Chat model used by the reusable LLM client. | `llama-3.3-70b-versatile` |
 | `EMBEDDING_MODEL` | `app.embeddings.EmbeddingsClient` | Sentence Transformers model name. | `BAAI/bge-small-en-v1.5` |
 
 The repository has a `.env` file locally, and `.gitignore` contains `.env`, so secrets should stay out of version control.
 
 ## Example Usage
 
-There is no single application entrypoint yet, but the modules can be composed like this:
+The easiest way to run the full pipeline is:
+
+```powershell
+python -m app.main "What is this PDF about?"
+```
+
+By default, this command reads PDFs from `data/`, chunks them, builds an in-memory FAISS index, retrieves relevant chunks, sends context to Groq, and prints the answer plus source pages.
+
+You can also control the run:
+
+```powershell
+python -m app.main "Ask your question here" --data-dir data --top-k 5 --max-chunks 3
+```
+
+The modules can also be composed manually:
 
 ```python
 from pathlib import Path
@@ -228,12 +243,6 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-For a clean environment, also install the missing imported packages until they are added to `requirements.txt`:
-
-```powershell
-pip install pypdf groq
-```
-
 Create a `.env` file or set environment variables in your shell:
 
 ```text
@@ -248,6 +257,12 @@ Run all tests:
 
 ```powershell
 pytest
+```
+
+Ask a question against PDFs in `data/`:
+
+```powershell
+python -m app.main "What is this PDF about?"
 ```
 
 Inspect the sample PDF:
@@ -276,18 +291,14 @@ The test suite covers the main contracts:
 ## Current Findings
 
 - The core RAG pipeline is modular and testable: ingestion, chunking, embeddings, vector storage, retrieval, prompt construction, and LLM generation are separated into focused modules.
-- The project currently lacks a CLI or app entrypoint that performs the full ingest-to-answer workflow from one command.
-- `requirements.txt` is missing `pypdf` and `groq`, even though both are imported by source files.
-- `app.llm.LLMClient` defaults `GROQ_MODEL` to `gpt-3.5-turbo`, which is an OpenAI-style model name and may not be valid for Groq. The smoke-test script uses `llama-3.3-70b-versatile`.
+- `app.main` provides a CLI entrypoint that performs the full ingest-to-answer workflow from one command.
 - The vector store requires callers to know the embedding dimension before construction. The example above probes it from the embedder.
 - `load_documents` silently skips PDFs that raise exceptions. That keeps ingestion resilient, but production code should log skipped files.
 - `.gitignore` only contains `.env`; generated folders such as `venv/`, `.pytest_cache/`, and `__pycache__/` should normally be ignored.
 
 ## Suggested Next Improvements
 
-1. Add a real entrypoint such as `python -m app.main --data data --question "..."`.
-2. Add `pypdf` and `groq` to `requirements.txt`.
-3. Update the default Groq model in `app.llm` to a known Groq-supported model.
-4. Add logging for skipped PDFs during ingestion.
-5. Persist a built vector store under a dedicated ignored directory such as `storage/`.
-6. Expand `.gitignore` to exclude virtual environments, caches, and generated vector indexes.
+1. Add logging for skipped PDFs during ingestion.
+2. Persist a built vector store under a dedicated ignored directory such as `storage/`.
+3. Expand `.gitignore` to exclude virtual environments, caches, and generated vector indexes.
+4. Add a streaming or interactive chat mode for repeated questions.

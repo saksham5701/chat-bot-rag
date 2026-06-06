@@ -12,7 +12,7 @@ class LLMClient:
             raise ValueError("GROQ_API_KEY must be set to use LLMClient.")
 
         self.client = Groq(api_key=self.api_key)
-        self.model = model or os.getenv("GROQ_MODEL", "gpt-3.5-turbo")
+        self.model = model or os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
 
     def generate(self, prompt: str, temperature: float = 0.0) -> str:
         response = self.client.chat.completions.create(
